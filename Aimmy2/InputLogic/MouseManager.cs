@@ -4,6 +4,7 @@ using Class;
 using MouseMovementLibraries.ddxoftSupport;
 using MouseMovementLibraries.RazerSupport;
 using MouseMovementLibraries.SendInputSupport;
+//using MouseMovementLibraries.ArduinoSupport;
 using System.Drawing;
 using System.Runtime.InteropServices;
 
@@ -24,11 +25,14 @@ namespace InputLogic
         private static double previousY = 0;
         public static double smoothingFactor = 0.5;
         public static bool IsEMASmoothingEnabled = false;
+        public static double CurveStrength = 0.75;
 
         [DllImport("user32.dll")]
         private static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint dwData, int dwExtraInfo);
 
         private static Random MouseRandom = new();
+
+        //public static SocketArduinoMouse arduinoController = new();
 
         private static Point CubicBezier(Point start, Point end, Point control1, Point control2, double t)
         {
@@ -86,7 +90,10 @@ namespace InputLogic
                     mouseDownAction = () => DdxoftMain.ddxoftInstance.btn!(1);
                     mouseUpAction = () => DdxoftMain.ddxoftInstance.btn(2);
                     break;
-
+                //case "Arduino":
+                //    mouseDownAction = () => arduinoController.SendMouseClick(1);
+                //    mouseUpAction = () => arduinoController.SendMouseClick(0);
+                //    break;
                 default:
                     mouseDownAction = () => mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0);
                     mouseUpAction = () => mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0);
@@ -130,6 +137,10 @@ namespace InputLogic
                     DdxoftMain.ddxoftInstance.movR!(xRecoil, yRecoil);
                     break;
 
+                case "Arduino":
+                    //arduinoController.SendMouseCoordinates(xRecoil, yRecoil);
+                    break;
+
                 default:
                     mouse_event(MOUSEEVENTF_MOVE, (uint)xRecoil, (uint)yRecoil, 0, 0);
                     break;
@@ -154,8 +165,16 @@ namespace InputLogic
 
             Point start = new(0, 0);
             Point end = new(targetX, targetY);
-            Point control1 = new(start.X + (end.X - start.X) / 3, start.Y + (end.Y - start.Y) / 3);
-            Point control2 = new(start.X + 2 * (end.X - start.X) / 3, start.Y + 2 * (end.Y - start.Y) / 3);
+            Point midPoint = new((start.X + end.X) / 2, (start.Y + end.Y) / 2);
+            System.Windows.Vector direction = new System.Windows.Vector(end.X - start.X, end.Y - start.Y);
+            direction.Normalize();
+
+            double curveAmount = 0.75;
+            System.Windows.Vector perpendicular = new System.Windows.Vector(-direction.Y, direction.X) * (curveAmount * direction.Length);
+
+            Point control1 = new Point((int)(start.X + (end.X - start.X) / 3 + perpendicular.X), (int)(start.Y + (end.Y - start.Y) / 3 + perpendicular.Y));
+            Point control2 = new Point((int)(start.X + 2 * (end.X - start.X) / 3 + perpendicular.X), (int)(start.Y + 2 * (end.Y - start.Y) / 3 + perpendicular.Y));
+
             Point newPosition = CubicBezier(start, end, control1, control2, 1 - Dictionary.sliderSettings["Mouse Sensitivity (+/-)"]);
 
             targetX = Math.Clamp(targetX, -150, 150);
@@ -183,6 +202,10 @@ namespace InputLogic
                 case "ddxoft Virtual Input Driver":
                     DdxoftMain.ddxoftInstance.movR!(newPosition.X, newPosition.Y);
                     break;
+
+                //case "Arduino":
+                //    arduinoController.SendMouseCoordinates(newPosition.X, newPosition.Y);
+                //    break;
 
                 default:
                     mouse_event(MOUSEEVENTF_MOVE, (uint)newPosition.X, (uint)newPosition.Y, 0, 0);

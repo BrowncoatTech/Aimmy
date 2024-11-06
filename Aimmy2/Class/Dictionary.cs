@@ -28,6 +28,7 @@ namespace Aimmy2.Class
             { "FOV Size", 640 },
             { "Dynamic FOV Size", 200 },
             { "Mouse Sensitivity (+/-)", 0.80 },
+            { "Bezier Curve Strength", 0.75 },
             { "Mouse Jitter", 4 },
             { "Y Offset (Up/Down)", 0 },
             { "Y Offset (%)", 50 },
@@ -48,7 +49,6 @@ namespace Aimmy2.Class
         {
             { "Aim Assist", false },
             { "Constant AI Tracking", false },
-            { "Predictions", false },
             { "EMA Smoothening", false },
             { "Enable Model Switch Keybind", true },
             { "Enable Gun Switching Keybind", false },
@@ -56,15 +56,15 @@ namespace Aimmy2.Class
             { "Anti Recoil", false },
             { "FOV", false },
             { "Dynamic FOV", false },
+            { "Third Person Support", false },
             { "Masking", false },
             { "Show Detected Player", false },
             { "Show AI Confidence", false },
             { "Show Tracers", false },
-            { "Collect Data While Playing", false },
-            { "Auto Label Data", false },
             { "LG HUB Mouse Movement", false },
-            { "Mouse Background Effect", true },
+            { "Mouse Background Effect", false },
             { "UI TopMost", false },
+            { "Debug Mode", false },
             { "X Axis Percentage Adjustment", false },
             { "Y Axis Percentage Adjustment", false }
         };
@@ -84,10 +84,9 @@ namespace Aimmy2.Class
 
         public static Dictionary<string, dynamic> dropdownState = new()
         {
-            { "Prediction Method", "Kalman Filter" },
             { "Detection Area Type", "Closest to Center Screen" },
             { "Aiming Boundaries Alignment", "Center" },
-            { "Mouse Movement Method", "Mouse Event" }
+            { "Mouse Movement Method", "Mouse Event" },
         };
 
         public static Dictionary<string, dynamic> colorState = new()

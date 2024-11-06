@@ -1,3 +1,4 @@
+using Aimmy2.AILogic;
 using Aimmy2.Class;
 using Aimmy2.MouseMovementLibraries.GHubSupport;
 using Aimmy2.Other;
@@ -8,6 +9,7 @@ using InputLogic;
 using Microsoft.Win32;
 using MouseMovementLibraries.ddxoftSupport;
 using MouseMovementLibraries.RazerSupport;
+//using MouseMovementLibraries.ArduinoSupport;
 using Other;
 using System.Diagnostics;
 using System.IO;
@@ -116,11 +118,10 @@ namespace Aimmy2
 
             ListenForKeybinds();
             LoadMenuMinimizers();
+            VisibilityXY();
         }
 
         private async void LoadStoreMenuAsync() => await LoadStoreMenu();
-
-        private void Window_Loaded(object sender, RoutedEventArgs e) => AboutSpecs.Content = $"{GetProcessorName()} • {GetVideoControllerName()} • {GetFormattedMemorySize()}GB RAM";
 
         private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) => DragMove();
 
@@ -171,7 +172,7 @@ namespace Aimmy2
             if (sender is Button clickedButton && !CurrentlySwitching && CurrentMenu != clickedButton.Tag.ToString())
             {
                 CurrentlySwitching = true;
-                Animator.ObjectShift(TimeSpan.FromMilliseconds(350), MenuHighlighter, MenuHighlighter.Margin, clickedButton.Margin);
+                Animator.ObjectShift(TimeSpan.FromMilliseconds(150), MenuHighlighter, MenuHighlighter.Margin, clickedButton.Margin);
                 await SwitchScrollPanels(FindName(clickedButton.Tag.ToString()) as ScrollViewer ?? throw new NullReferenceException("Scrollpanel is null"));
                 CurrentMenu = clickedButton.Tag.ToString()!;
             }
@@ -180,12 +181,9 @@ namespace Aimmy2
         private async Task SwitchScrollPanels(ScrollViewer MovingScrollViewer)
         {
             MovingScrollViewer.Visibility = Visibility.Visible;
-            Animator.Fade(MovingScrollViewer);
-            Animator.ObjectShift(TimeSpan.FromMilliseconds(350), MovingScrollViewer, MovingScrollViewer.Margin, new Thickness(50, 50, 0, 0));
+            Animator.ObjectShift(TimeSpan.FromMilliseconds(0), MovingScrollViewer, MovingScrollViewer.Margin, new Thickness(50, 50, 0, 0));
 
-            Animator.FadeOut(CurrentScrollViewer!);
-            Animator.ObjectShift(TimeSpan.FromMilliseconds(350), CurrentScrollViewer!, CurrentScrollViewer!.Margin, new Thickness(50, 450, 0, -400));
-            await Task.Delay(350);
+            Animator.ObjectShift(TimeSpan.FromMilliseconds(0), CurrentScrollViewer!, CurrentScrollViewer!.Margin, new Thickness(50, 450, 0, -400));
 
             CurrentScrollViewer.Visibility = Visibility.Collapsed;
             CurrentScrollViewer = MovingScrollViewer;
@@ -231,14 +229,6 @@ namespace Aimmy2
 
         private void LoadDropdownStates()
         {
-            // Prediction Method Dropdown
-            uiManager.D_PredictionMethod!.DropdownBox.SelectedIndex = Dictionary.dropdownState["Prediction Method"] switch
-            {
-                "Shall0e's Prediction" => 1,
-                "wisethef0x's EMA Prediction" => 2,
-                _ => 0 // Default case if none of the above matches
-            };
-
             // Detection Area Type Dropdown
             uiManager.D_DetectionAreaType!.DropdownBox.SelectedIndex = Dictionary.dropdownState["Detection Area Type"] switch
             {
@@ -329,7 +319,14 @@ namespace Aimmy2
 
                 case "EMA Smoothening":
                     MouseManager.IsEMASmoothingEnabled = Dictionary.toggleState[title];
-                    Debug.WriteLine(MouseManager.IsEMASmoothingEnabled);
+                    break;
+
+                case "X Axis Percentage Adjustment":
+                    VisibilityXY();
+                    break;
+
+                case "Y Axis Percentage Adjustment":
+                    VisibilityXY();
                     break;
             }
         }
@@ -586,7 +583,6 @@ namespace Aimmy2
                     UpdateToggleUI(uiManager.T_AimAligner, true);
                 }
             };
-            uiManager.T_Predictions = AddToggle(AimAssist, "Predictions");
             uiManager.T_EMASmoothing = AddToggle(AimAssist, "EMA Smoothening");
             uiManager.C_EmergencyKeybind = AddKeyChanger(AimAssist, "Emergency Stop Keybind", Dictionary.bindingSettings["Emergency Stop Keybind"]);
             uiManager.T_EnableModelSwitchKeybind = AddToggle(AimAssist, "Enable Model Switch Keybind");
@@ -598,12 +594,6 @@ namespace Aimmy2
             #region Config
 
             uiManager.AT_AimConfig = AddTitle(AimConfig, "Aim Config", true);
-            uiManager.D_PredictionMethod = AddDropdown(AimConfig, "Prediction Method");
-
-            AddDropdownItem(uiManager.D_PredictionMethod, "Kalman Filter");
-            AddDropdownItem(uiManager.D_PredictionMethod, "Shall0e's Prediction");
-            AddDropdownItem(uiManager.D_PredictionMethod, "wisethef0x's EMA Prediction");
-
             uiManager.D_DetectionAreaType = AddDropdown(AimConfig, "Detection Area Type");
             uiManager.DDI_ClosestToCenterScreen = AddDropdownItem(uiManager.D_DetectionAreaType, "Closest to Center Screen");
             uiManager.DDI_ClosestToCenterScreen.Selected += async (sender, e) =>
@@ -630,8 +620,13 @@ namespace Aimmy2
                 if (uiManager.S_MouseSensitivity.Slider.Value >= 0.98) new NoticeBar("The Mouse Sensitivity you have set can cause Aimmy to be unable to aim, please decrease if you suffer from this problem", 10000).Show();
                 else if (uiManager.S_MouseSensitivity.Slider.Value <= 0.1) new NoticeBar("The Mouse Sensitivity you have set can cause Aimmy to be unstable to aim, please increase if you suffer from this problem", 10000).Show();
             };
+            uiManager.S_CurveStrength = AddSlider(AimConfig, "Bezier Curve Strength", "Strength", 0.01, 0.01, 0.01, 2);
+            uiManager.S_CurveStrength.Slider.ValueChanged += (s, x) =>
+            {
+                MouseManager.CurveStrength = uiManager.S_CurveStrength.Slider.Value;
+            };
             uiManager.S_MouseJitter = AddSlider(AimConfig, "Mouse Jitter", "Jitter", 1, 1, 0, 15);
-
+            uiManager.S_AIMinimumConfidence = AddSlider(AimConfig, "AI Minimum Confidence", "% Confidence", 1, 1, 1, 100);
             uiManager.S_YOffset = AddSlider(AimConfig, "Y Offset (Up/Down)", "Offset", 1, 1, -150, 150);
             uiManager.S_YOffsetPercent = AddSlider(AimConfig, "Y Offset (%)", "Percent", 1, 1, 0, 100);
 
@@ -639,6 +634,14 @@ namespace Aimmy2
             uiManager.S_XOffsetPercent = AddSlider(AimConfig, "X Offset (%)", "Percent", 1, 1, 0, 100);
 
             uiManager.S_EMASmoothing = AddSlider(AimConfig, "EMA Smoothening", "Amount", 0.01, 0.01, 0.01, 1);
+            uiManager.S_EMASmoothing.Slider.ValueChanged += (s, x) =>
+            {
+                if (Dictionary.toggleState["EMA Smoothening"])
+                {
+                    MouseManager.smoothingFactor = uiManager.S_EMASmoothing.Slider.Value;
+                    Debug.WriteLine(MouseManager.smoothingFactor);
+                }
+            };
 
             AddSeparator(AimConfig);
 
@@ -704,6 +707,11 @@ namespace Aimmy2
             uiManager.AT_FOV = AddTitle(FOVConfig, "FOV Config", true);
             uiManager.T_FOV = AddToggle(FOVConfig, "FOV");
             uiManager.T_DynamicFOV = AddToggle(FOVConfig, "Dynamic FOV");
+            uiManager.T_TPS = AddToggle(FOVConfig, "Third Person Support");
+            uiManager.T_TPS.Reader.Click += (s, x) =>
+            {
+                AIManager.TPS ^= true;
+            };
             uiManager.C_DynamicFOV = AddKeyChanger(FOVConfig, "Dynamic FOV Keybind", Dictionary.bindingSettings["Dynamic FOV Keybind"]);
             uiManager.CC_FOVColor = AddColorChanger(FOVConfig, "FOV Color");
             uiManager.CC_FOVColor.ColorChangingBorder.Background = (Brush)new BrushConverter().ConvertFromString(Dictionary.colorState["FOV Color"]);
@@ -717,7 +725,6 @@ namespace Aimmy2
                     PropertyChanger.PostColor(Color.FromArgb(colorDialog.Color.A, colorDialog.Color.R, colorDialog.Color.G, colorDialog.Color.B));
                 }
             };
-
             uiManager.S_FOVSize = AddSlider(FOVConfig, "FOV Size", "Size", 1, 1, 10, 640);
             uiManager.S_FOVSize.Slider.ValueChanged += (s, x) =>
             {
@@ -733,14 +740,7 @@ namespace Aimmy2
                     PropertyChanger.PostNewFOVSize(uiManager.S_DynamicFOVSize.Slider.Value);
                 }
             };
-            uiManager.S_EMASmoothing.Slider.ValueChanged += (s, x) =>
-            {
-                if (Dictionary.toggleState["EMA Smoothening"])
-                {
-                    MouseManager.smoothingFactor = uiManager.S_EMASmoothing.Slider.Value;
-                    Debug.WriteLine(MouseManager.smoothingFactor);
-                }
-            };
+
             AddSeparator(FOVConfig);
 
             #endregion FOV Config
@@ -784,11 +784,10 @@ namespace Aimmy2
         {
             uiManager.AT_SettingsMenu = AddTitle(SettingsConfig, "Settings Menu", true);
 
-            uiManager.T_CollectDataWhilePlaying = AddToggle(SettingsConfig, "Collect Data While Playing");
-            uiManager.T_AutoLabelData = AddToggle(SettingsConfig, "Auto Label Data");
             uiManager.D_MouseMovementMethod = AddDropdown(SettingsConfig, "Mouse Movement Method");
             AddDropdownItem(uiManager.D_MouseMovementMethod, "Mouse Event");
             AddDropdownItem(uiManager.D_MouseMovementMethod, "SendInput");
+            //AddDropdownItem(uiManager.D_MouseMovementMethod, "Arduino");
             uiManager.DDI_LGHUB = AddDropdownItem(uiManager.D_MouseMovementMethod, "LG HUB");
 
             uiManager.DDI_LGHUB.Selected += (sender, e) =>
@@ -815,7 +814,6 @@ namespace Aimmy2
                     SelectMouseEvent();
                 }
             };
-            uiManager.S_AIMinimumConfidence = AddSlider(SettingsConfig, "AI Minimum Confidence", "% Confidence", 1, 1, 1, 100);
             uiManager.S_AIMinimumConfidence.Slider.PreviewMouseLeftButtonUp += (sender, e) =>
             {
                 if (uiManager.S_AIMinimumConfidence.Slider.Value >= 95) new NoticeBar("The minimum confidence you have set for Aimmy to be too high and may be unable to detect players.", 10000).Show();
@@ -823,8 +821,10 @@ namespace Aimmy2
             };
             uiManager.T_MouseBackgroundEffect = AddToggle(SettingsConfig, "Mouse Background Effect");
             uiManager.T_UITopMost = AddToggle(SettingsConfig, "UI TopMost");
+            uiManager.T_Debug = AddToggle(SettingsConfig, "Debug Mode");
             uiManager.B_SaveConfig = AddButton(SettingsConfig, "Save Config");
             uiManager.B_SaveConfig.Reader.Click += (s, e) => new ConfigSaver().ShowDialog();
+
 
             AddSeparator(SettingsConfig);
 
@@ -832,6 +832,9 @@ namespace Aimmy2
             uiManager.AT_XYPercentageAdjustmentEnabler = AddTitle(XYPercentageEnablerMenu, "X/Y Percentage Adjustment", true);
             uiManager.T_XAxisPercentageAdjustment = AddToggle(XYPercentageEnablerMenu, "X Axis Percentage Adjustment");
             uiManager.T_YAxisPercentageAdjustment = AddToggle(XYPercentageEnablerMenu, "Y Axis Percentage Adjustment");
+            uiManager.T_XAxisPercentageAdjustment.Reader.Click += (s, e) => VisibilityXY();
+            uiManager.T_YAxisPercentageAdjustment.Reader.Click += (s, e) => VisibilityXY();
+
             AddSeparator(XYPercentageEnablerMenu);
 
             // ddxoft Menu
@@ -913,9 +916,40 @@ namespace Aimmy2
 
         #region Menu Minizations
 
+        private void VisibilityXY()
+        {
+            bool isMenuMinimized = Dictionary.minimizeState["Aim Config"];
+
+            bool xPercentageAdjustment = Dictionary.toggleState["X Axis Percentage Adjustment"];
+            bool yPercentageAdjustment = Dictionary.toggleState["Y Axis Percentage Adjustment"];
+
+            if (uiManager?.S_XOffset != null && uiManager?.S_XOffsetPercent != null)
+            {
+                if (!isMenuMinimized)
+                {
+                    uiManager.S_XOffset.Visibility = xPercentageAdjustment ? Visibility.Collapsed : Visibility.Visible;
+                    uiManager.S_XOffsetPercent.Visibility = xPercentageAdjustment ? Visibility.Visible : Visibility.Collapsed;
+                }
+            }
+
+
+            if (uiManager?.S_YOffset != null && uiManager?.S_YOffsetPercent != null)
+            {
+                if (!isMenuMinimized)
+                {
+                    uiManager.S_YOffset.Visibility = yPercentageAdjustment ? Visibility.Collapsed : Visibility.Visible;
+                    uiManager.S_YOffsetPercent.Visibility = yPercentageAdjustment ? Visibility.Visible : Visibility.Collapsed;
+                }
+            }
+        }
+
         private void ToggleAimMenu() => SetMenuVisibility(AimAssist, !Dictionary.minimizeState["Aim Assist"]);
 
-        private void ToggleAimConfig() => SetMenuVisibility(AimConfig, !Dictionary.minimizeState["Aim Config"]);
+        private void ToggleAimConfig()
+        {
+            SetMenuVisibility(AimConfig, !Dictionary.minimizeState["Aim Config"]);
+            VisibilityXY();
+        }
 
         private void ToggleAutoTrigger() => SetMenuVisibility(TriggerBot, !Dictionary.minimizeState["Auto Trigger"]);
 
@@ -1090,20 +1124,6 @@ namespace Aimmy2
 
         #endregion Menu Functions
 
-        #region System Information
-
-        private static string? GetProcessorName() => GetSpecs.GetSpecification("Win32_Processor", "Name");
-
-        private static string? GetVideoControllerName() => GetSpecs.GetSpecification("Win32_VideoController", "Name");
-
-        private static string? GetFormattedMemorySize()
-        {
-            long totalMemorySize = long.Parse(GetSpecs.GetSpecification("CIM_OperatingSystem", "TotalVisibleMemorySize")!);
-            return Math.Round(totalMemorySize / (1024.0 * 1024.0), 0).ToString();
-        }
-
-        #endregion System Information
-
         #region Fancy UI Calculations
 
         private double currentGradientAngle = 0;
@@ -1123,13 +1143,6 @@ namespace Aimmy2
         {
             if (!Dictionary.toggleState["Show Detected Player"]) { DPWindow.Hide(); }
             else { DPWindow.Show(); }
-        }
-
-        private async void CheckForUpdates_Click(object sender, RoutedEventArgs e)
-        {
-            UpdateManager updateManager = new UpdateManager();
-            await updateManager.CheckForUpdate("v2.2.0");
-            updateManager.Dispose();
         }
 
         #endregion Window Handling
