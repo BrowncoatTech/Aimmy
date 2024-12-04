@@ -19,6 +19,7 @@ using Vortice.Mathematics;
 using System.Runtime.InteropServices;
 using OpenCvSharp;
 using OpenCvSharp.Extensions;
+using ComputeSharp;
 
 namespace Aimmy2.AILogic
 {
@@ -238,54 +239,39 @@ namespace Aimmy2.AILogic
         {
             Stopwatch stopwatch = new();
             DetectedPlayerWindow? DetectedPlayerOverlay = Dictionary.DetectedPlayerOverlay;
-
+            float scaleX = ScreenWidth / 640f, scaleY = ScreenHeight / 640f;
             stopwatch.Start();
             while (_isAiLoopRunning)
             {
                 stopwatch.Restart();
-
                 UpdateFOV();
-
                 if (iterationCount == 1000)
                 {
                     if (Dictionary.toggleState["Debug Mode"])
-                    {
-                        double averageTime = totalTime / 1000.0;
-                        Application.Current.Dispatcher.Invoke(() => new NoticeBar($"Average AI Loop Time: {averageTime}ms", 5000).Show());
-                    }
-
+                        Application.Current.Dispatcher.Invoke(() => new NoticeBar($"Average AI Loop Time: {totalTime / 1000.0}ms", 5000).Show());
                     totalTime = 0;
                     iterationCount = 0;
                 }
-
-                float scaleX = ScreenWidth / 640f; // on new resolution you would need to restart the ailoop by loading new model or restarting aimmy
-                float scaleY = ScreenHeight / 640f;
-                if (ShouldProcess())
+                if (ShouldProcess() && ShouldPredict())
                 {
-                    if (ShouldPredict())
+                    var closestPrediction = await GetClosestPrediction();
+                    if (closestPrediction == null)
                     {
-                        var closestPrediction = await GetClosestPrediction();
-                        if (closestPrediction == null)
-                        {
-                            DisableOverlay(DetectedPlayerOverlay!);
-
-                            continue;
-                        }
-
-                        await AutoTrigger();
-
-                        CalculateCoordinates(DetectedPlayerOverlay, closestPrediction, scaleX, scaleY);
-
-                        HandleAim(closestPrediction);
-
-                        totalTime += stopwatch.ElapsedMilliseconds;
-                        iterationCount++;
+                        DisableOverlay(DetectedPlayerOverlay!);
+                        continue;
                     }
+                    await AutoTrigger();
+                    CalculateCoordinates(DetectedPlayerOverlay, closestPrediction, scaleX, scaleY);
+                    HandleAim(closestPrediction);
+                    totalTime += stopwatch.ElapsedMilliseconds;
+                    iterationCount++;
                 }
-                await Task.Delay(1); // Add a small delay to avoid high GPU/CPU usage
+                await Task.Delay(1);
             }
             stopwatch.Stop();
         }
+
+
         #endregion
         #region AI Loop Functions
         #region misc
@@ -464,99 +450,93 @@ namespace Aimmy2.AILogic
             int y = Math.Max(0, Math.Min(rect.Y, screenHeight - rect.Height));
             int width = Math.Min(rect.Width, screenWidth - x);
             int height = Math.Min(rect.Height, screenHeight - y);
-
             return new Rectangle(x, y, width, height);
         }
+
         private async Task<Prediction?> GetClosestPrediction(bool useMousePosition = true)
         {
             var cursorPosition = WinAPICaller.GetCursorPosition();
-            targetX = Dictionary.dropdownState["Detection Area Type"] == "Closest to Mouse" ? cursorPosition.X : ScreenWidth / 2;
-            targetY = Dictionary.dropdownState["Detection Area Type"] == "Closest to Mouse" ? cursorPosition.Y : ScreenHeight / 2;
-            Rectangle detectionBox = new(targetX - IMAGE_SIZE / 2, targetY - IMAGE_SIZE / 2, IMAGE_SIZE, IMAGE_SIZE);
-            detectionBox = ClampRectangle(detectionBox, ScreenWidth, ScreenHeight);
-
-            Bitmap? frame = ScreenGrab(detectionBox);
+            targetX = Dictionary.dropdownState["Detection Area Type"] == "Closest to Mouse" ? cursorPosition.X : ScreenWidth >> 1;
+            targetY = Dictionary.dropdownState["Detection Area Type"] == "Closest to Mouse" ? cursorPosition.Y : ScreenHeight >> 1;
+            Rectangle detectionBox = ClampRectangle(new(targetX - (IMAGE_SIZE >> 1), targetY - (IMAGE_SIZE >> 1), IMAGE_SIZE, IMAGE_SIZE), ScreenWidth, ScreenHeight);
+            var frame = ScreenGrab(detectionBox);
             if (frame == null) return null;
-
-            float[] inputArray = BitmapToFloatArray(frame);
+            var inputArray = BitmapToFloatArray(frame);
             if (_onnxModel == null || inputArray == null) return null;
-
-            Tensor<float> inputTensor = new DenseTensor<float>(inputArray, new int[] { 1, 3, frame.Height, frame.Width });
+            var inputTensor = new DenseTensor<float>(inputArray, new int[] { 1, 3, frame.Height, frame.Width });
             var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor("images", inputTensor) };
-
             using var results = _onnxModel.Run(inputs, _outputNames, _modeloptions);
             var outputTensor = results[0].AsTensor<float>();
-
             float FovSize = (float)Dictionary.sliderSettings["FOV Size"];
-            float fovMinX = (IMAGE_SIZE - FovSize) / 2.0f;
-            float fovMaxX = (IMAGE_SIZE + FovSize) / 2.0f;
-            float fovMinY = (IMAGE_SIZE - FovSize) / 2.0f;
-            float fovMaxY = (IMAGE_SIZE + FovSize) / 2.0f;
-
+            float fovHalfSize = FovSize * 0.5f;
+            float fovMinX = (IMAGE_SIZE - FovSize) * 0.5f;
+            float fovMaxX = fovMinX + FovSize;
+            float fovMinY = (IMAGE_SIZE - FovSize) * 0.5f;
+            float fovMaxY = fovMinY + FovSize;
             var (KDpoints, KDPredictions) = PrepareKDTreeData(outputTensor, detectionBox, fovMinX, fovMaxX, fovMinY, fovMaxY);
-
             if (KDpoints.Count == 0) return null;
-
             var tree = new KDTree<double, Prediction>(2, KDpoints.ToArray(), KDPredictions.ToArray(), L2Norm_Squared_Double);
-            var nearest = tree.NearestNeighbors(new double[] { IMAGE_SIZE / 2.0, IMAGE_SIZE / 2.0 }, 1);
-
+            var nearest = tree.NearestNeighbors(new double[] { IMAGE_SIZE * 0.5, IMAGE_SIZE * 0.5 }, 1);
             if (nearest.Length > 0)
             {
                 var nearestPrediction = nearest[0].Item2;
                 float translatedXMin = nearestPrediction.Rectangle.X + detectionBox.Left;
                 float translatedYMin = nearestPrediction.Rectangle.Y + detectionBox.Top;
-
                 LastDetectionBox = new RectangleF(translatedXMin, translatedYMin, nearestPrediction.Rectangle.Width, nearestPrediction.Rectangle.Height);
                 CenterXTranslated = nearestPrediction.CenterXTranslated;
                 CenterYTranslated = nearestPrediction.CenterYTranslated;
-
                 return nearestPrediction;
             }
-
             return null;
         }
-
 
         private static (List<double[]>, List<Prediction>) PrepareKDTreeData(Tensor<float> outputTensor, Rectangle detectionBox, float fovMinX, float fovMaxX, float fovMinY, float fovMaxY)
         {
             float minConfidence = (float)Dictionary.sliderSettings["AI Minimum Confidence"] / 100.0f;
-            int numDetections = NUM_DETECTIONS;
-
-            var KDpoints = new List<double[]>(numDetections);
-            var KDpredictions = new List<Prediction>(numDetections);
-
+            var KDpoints = new List<double[]>(NUM_DETECTIONS);
+            var KDpredictions = new List<Prediction>(NUM_DETECTIONS);
             float imgSizeInv = 1.0f / IMAGE_SIZE;
             float boxLeft = detectionBox.Left;
             float boxTop = detectionBox.Top;
+            Span<float> tensorSpan = outputTensor.ToArray();
 
-            for (int i = 0; i < numDetections; i++)
+            for (int i = 0; i < NUM_DETECTIONS; i += 4)
             {
-                float objectness = outputTensor[0, 4, i];
-                if (objectness < minConfidence) continue;
+                var detections = new ValueTuple<float, float, float, float, float>[4];
+                int count = Math.Min(4, NUM_DETECTIONS - i);
+                int detCount = 0;
 
-                float x_center = outputTensor[0, 0, i];
-                float y_center = outputTensor[0, 1, i];
-                float width = outputTensor[0, 2, i];
-                float height = outputTensor[0, 3, i];
-
-                float halfWidth = width * 0.5f;
-                float halfHeight = height * 0.5f;
-
-                float x_min = x_center - halfWidth;
-                float y_min = y_center - halfHeight;
-                float x_max = x_center + halfWidth;
-                float y_max = y_center + halfHeight;
-
-                if (x_min < fovMinX || x_max > fovMaxX || y_min < fovMinY || y_max > fovMaxY) continue;
-
-                KDpoints.Add(new double[] { x_center, y_center });
-                KDpredictions.Add(new Prediction
+                for (int j = 0; j < count; j++)
                 {
-                    Rectangle = new RectangleF(x_min, y_min, width, height),
-                    Confidence = objectness,
-                    CenterXTranslated = (x_center - boxLeft) * imgSizeInv,
-                    CenterYTranslated = (y_center - boxTop) * imgSizeInv
-                });
+                    float objectness = tensorSpan[4 * NUM_DETECTIONS + i + j];
+                    if (objectness < minConfidence) continue;
+                    detections[detCount++] = (
+                        tensorSpan[i + j],
+                        tensorSpan[NUM_DETECTIONS + i + j],
+                        tensorSpan[2 * NUM_DETECTIONS + i + j],
+                        tensorSpan[3 * NUM_DETECTIONS + i + j],
+                        objectness
+                    );
+                }
+
+                for (int k = 0; k < detCount; k++)
+                {
+                    var (x_center, y_center, width, height, objectness) = detections[k];
+                    float x_min = x_center - width * 0.5f;
+                    float y_min = y_center - height * 0.5f;
+                    float x_max = x_center + width * 0.5f;
+                    float y_max = y_center + height * 0.5f;
+                    if (x_min < fovMinX || x_max > fovMaxX || y_min < fovMinY || y_max > fovMaxY) continue;
+
+                    KDpoints.Add(new double[] { x_center, y_center });
+                    KDpredictions.Add(new Prediction
+                    {
+                        Rectangle = new RectangleF(x_min, y_min, width, height),
+                        Confidence = objectness,
+                        CenterXTranslated = (x_center - boxLeft) * imgSizeInv,
+                        CenterYTranslated = (y_center - boxTop) * imgSizeInv
+                    });
+                }
             }
 
             return (KDpoints, KDpredictions);

@@ -4,6 +4,7 @@ using Class;
 using MouseMovementLibraries.ddxoftSupport;
 using MouseMovementLibraries.RazerSupport;
 using MouseMovementLibraries.SendInputSupport;
+using System.Diagnostics;
 //using MouseMovementLibraries.ArduinoSupport;
 using System.Drawing;
 using System.Runtime.InteropServices;
@@ -169,8 +170,7 @@ namespace InputLogic
             System.Windows.Vector direction = new System.Windows.Vector(end.X - start.X, end.Y - start.Y);
             direction.Normalize();
 
-            double curveAmount = 0.75;
-            System.Windows.Vector perpendicular = new System.Windows.Vector(-direction.Y, direction.X) * (curveAmount * direction.Length);
+            System.Windows.Vector perpendicular = new System.Windows.Vector(-direction.Y, direction.X) * (CurveStrength * direction.Length);
 
             Point control1 = new Point((int)(start.X + (end.X - start.X) / 3 + perpendicular.X), (int)(start.Y + (end.Y - start.Y) / 3 + perpendicular.Y));
             Point control2 = new Point((int)(start.X + 2 * (end.X - start.X) / 3 + perpendicular.X), (int)(start.Y + 2 * (end.Y - start.Y) / 3 + perpendicular.Y));
