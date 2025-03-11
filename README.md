@@ -1,5 +1,5 @@
 # Aimmy
-This is a fork of Aimmy made by /whoswhip with a lot of new features and a lot of removed features. [I am trying to adjust it to utilize full AMD Acceleration via ROCm support instead of DirectML]
+This is a fork of Aimmy made by /whoswhip with a lot of new features and a lot of removed features. [I am trying to adjust it to utilize full AMD Acceleration via ROCm support instead of DirectML] Utilizing ROCm 6.3.3 and MIVisionX 2.5.0
 ## Features
 ```diff
 + General Optimization
