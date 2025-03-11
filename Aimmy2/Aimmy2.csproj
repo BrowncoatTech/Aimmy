@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup Label="Globals" Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
     <Microsoft_AI_DirectML_SkipDebugLayerCopy>True</Microsoft_AI_DirectML_SkipDebugLayerCopy>
@@ -73,7 +73,8 @@
     <PackageReference Include="hidlibrary" Version="3.3.40" />
     <PackageReference Include="HidSharp" Version="2.1.0" />
     <PackageReference Include="MaterialDesignThemes" Version="4.9.0" />
-    <PackageReference Include="Microsoft.ML.OnnxRuntime.DirectML" Version="1.17.3" />
+    <!-- Removed DirectML Package Reference -->
+    <!--<PackageReference Include="Microsoft.ML.OnnxRuntime.DirectML" Version="1.17.3" />-->
     <PackageReference Include="MouseKeyHook" Version="5.7.1" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="OpenCvSharp4" Version="4.10.0.20240616" />
