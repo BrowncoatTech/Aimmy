@@ -1,5 +1,5 @@
 # Aimmy
-This is a fork of Aimmy made by me with a lot of new features and a lot of removed features.
+This is a fork of Aimmy made by /whoswhip with a lot of new features and a lot of removed features. [I am trying to adjust it to utilize full AMD Acceleration via ROCm support instead of DirectML]
 ## Features
 ```diff
 + General Optimization
